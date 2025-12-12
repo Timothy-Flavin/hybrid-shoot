@@ -6,7 +6,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "my-custom-env"
+name = "hybrid_shoot"
 version = "0.1.0"
 description = "A custom RL environment with C++ backend and Gymnasium wrapper."
 authors = [{ name = "Your Name" }]
@@ -22,7 +22,6 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/you/my-custom-env"
 
-scikit-build-core config
 [tool.scikit-build]
 minimum-version = "0.5"
-wheel.packages = ["src/my_custom_env"]
+wheel.packages = ["src/hybrid_shoot"]
