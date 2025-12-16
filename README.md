@@ -1,17 +1,55 @@
 # Hybrid Shoot Environment
 
-This C++ gymnasium compliant env is designed as a sanity check
-for reinforcement learning with multiple actions with hybrid
-reprisentation. There are `num_enemies` enemies and two actions that need
-to be taken 1. Jam and 2. Shoot.
+This environment is designed as a sanity check for reinforcement learning with hybrid action spaces (discrete + continuous). It supports both **Gymnasium** (single agent with hybrid actions) and **PettingZoo** (multi-agent decomposition).
 
-## Action Space
-1. Jam Discrete cardonality: |num_enemies|
-2. Shoot Continuous dims:    2, box2D(-1,1), `[x,y]`
+There are `num_enemies` enemies in a 2D space. The goal is to Jam and Shoot them.
 
-## Action Descriptions
-Jamming an enemy agent stops it's attack from going through. The
-effect of shooting within 'hit_radius' of an enemy depends on the 
-gamemode. If `independent_mode=True` then shooting an enemy removes
-them at the end of the round. Otherwise, an enemy needs to be actively
-jammed in order to be removed by shoot. 
+## Installation
+
+```bash
+pip install .
+```
+
+## Gymnasium Usage
+
+The Gymnasium environment presents a single agent with a Tuple action space.
+
+```python
+from hybrid_shoot import HybridShootEnv
+
+env = HybridShootEnv()
+obs, info = env.reset()
+# Action: (Jam_Target_Index, [Shoot_X, Shoot_Y])
+action = (0, [0.5, 0.5]) 
+obs, reward, done, truncated, info = env.step(action)
+```
+
+### Action Space (Gymnasium)
+A `spaces.Tuple` containing:
+1.  **Jam**: `Discrete(num_enemies)` - Selects which enemy to jam.
+2.  **Shoot**: `Box(low=0, high=map_size, shape=(2,))` - `[x, y]` coordinates to shoot at.
+
+## PettingZoo Usage
+
+The PettingZoo environment decomposes the task into three cooperating agents.
+
+```python
+from hybrid_shoot import HybridShootPettingZooEnv
+
+env = HybridShootPettingZooEnv()
+observations, infos = env.reset()
+```
+
+### Agents & Action Spaces (PettingZoo)
+1.  `jammer`: `Discrete(num_enemies)` - Selects which enemy to jam.
+2.  `shooter_x`: `Box(low=0, high=map_size, shape=(1,))` - Selects the X coordinate.
+3.  `shooter_y`: `Box(low=0, high=map_size, shape=(1,))` - Selects the Y coordinate.
+
+## Game Mechanics
+
+**Jamming**: Stops the targeted enemy from dealing damage this turn.
+**Shooting**: Fires at location `(x, y)`.
+
+-   **Standard Mode** (`independent_mode=False`): An enemy must be **jammed** to be vulnerable to shooting. Shooting an unjammed enemy does nothing (or incurs a penalty).
+-   **Independent Mode** (`independent_mode=True`): Jamming prevents damage, and Shooting kills enemies regardless of whether they are jammed.
+ 
