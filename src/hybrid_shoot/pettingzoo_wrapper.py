@@ -20,7 +20,7 @@ class HybridShootPettingZooEnv(ParallelEnv):
         self.env = HybridShootEnv(
             independent_mode, n_enemies, map_size, hit_radius, render_mode
         )
-        self.possible_agents = ["jammer", "shooter_x", "shooter_y"]
+        self.possible_agents = ["jammer", "shooter"]
         self.agents = self.possible_agents[:]
 
         self.observation_spaces = {
@@ -29,12 +29,7 @@ class HybridShootPettingZooEnv(ParallelEnv):
 
         self.action_spaces = {
             "jammer": spaces.Discrete(n_enemies),
-            "shooter_x": spaces.Box(
-                low=0.0, high=map_size, shape=(1,), dtype=np.float64
-            ),
-            "shooter_y": spaces.Box(
-                low=0.0, high=map_size, shape=(1,), dtype=np.float64
-            ),
+            "shooter": spaces.Box(low=0.0, high=map_size, shape=(2,), dtype=np.float64),
         }
         self.render_mode = render_mode
 
@@ -48,20 +43,17 @@ class HybridShootPettingZooEnv(ParallelEnv):
     def step(self, actions):
         # Default actions if missing
         jam_act = actions.get("jammer", 0)
-        x_act = actions.get("shooter_x", np.array([0.0]))
-        y_act = actions.get("shooter_y", np.array([0.0]))
+        shoot_act = actions.get("shooter", np.array([0.0, 0.0]))
 
-        # Handle scalar vs array inputs for Box spaces
-        if hasattr(x_act, "item"):
-            x_act = x_act.item()
-        if hasattr(y_act, "item"):
-            y_act = y_act.item()
+        # Ensure it's a list or array of floats
+        if hasattr(shoot_act, "tolist"):
+            shoot_act = shoot_act.tolist()
 
         # Construct action for underlying gym env
         # Gym env expects: (discrete_act, [x, y])
         gym_action = (
             int(jam_act),
-            np.array([float(x_act), float(y_act)], dtype=np.float64),
+            np.array(shoot_act, dtype=np.float64),
         )
 
         obs, reward, terminated, truncated, info = self.env.step(gym_action)

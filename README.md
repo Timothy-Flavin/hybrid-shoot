@@ -31,7 +31,7 @@ A `spaces.Tuple` containing:
 
 ## PettingZoo Usage
 
-The PettingZoo environment decomposes the task into three cooperating agents.
+The PettingZoo environment decomposes the task into two cooperating agents.
 
 ```python
 from hybrid_shoot import HybridShootPettingZooEnv
@@ -42,8 +42,7 @@ observations, infos = env.reset()
 
 ### Agents & Action Spaces (PettingZoo)
 1.  `jammer`: `Discrete(num_enemies)` - Selects which enemy to jam.
-2.  `shooter_x`: `Box(low=0, high=map_size, shape=(1,))` - Selects the X coordinate.
-3.  `shooter_y`: `Box(low=0, high=map_size, shape=(1,))` - Selects the Y coordinate.
+2.  `shooter`: `Box(low=0, high=map_size, shape=(2,))` - Selects the `[x, y]` coordinates.
 
 ## Game Mechanics
 
