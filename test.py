@@ -81,10 +81,10 @@ def test_renderer():
 
     obs, _ = env.reset()
 
-    for i in range(256):
+    for i in range(128):
         print(f"Step {i+1}/10")
         # Sample a random action from the defined action space
-        action = [0, i / 256]
+        action = [0, i / 128]
         # action = env.action_space.sample()
 
         # Gymnasium step returns 5 values

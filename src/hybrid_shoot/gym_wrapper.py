@@ -82,6 +82,8 @@ class HybridShootEnv(gym.Env):
             d (int): The 1D scalar input (0 to n*n - 1)
             n (int): The width of the square grid (must be a power of 2)
         """
+        if isinstance(d, (np.ndarray, list)):
+            d = d[0]
         d = round(d)
         rx, ry, t = 0, 0, d
         x, y = 0, 0
@@ -115,7 +117,7 @@ class HybridShootEnv(gym.Env):
         # Store state before step for rendering
         self.prev_state = self.state.copy()
         self.last_action = [discrete_act, continuous_act]
-        print(f"last action: {self.last_action}")
+        # print(f"last action: {self.last_action}")
         # Ensure conversion to list of doubles for C++
         cont_list = (
             continuous_act.tolist()
