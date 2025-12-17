@@ -83,8 +83,12 @@ def test_renderer():
     for i in range(20):
         print(f"Step {i+1}/10")
         # Sample a random action from the defined action space
+<<<<<<< HEAD
         action = [0, i / 20]
         # action = env.action_space.sample()
+=======
+        action = i / 10  # env.action_space.sample()
+>>>>>>> 285f2794178d962626c1ddb88e81351798b21cbd
 
         # Gymnasium step returns 5 values
         obs, reward, terminated, truncated, info = env.step(action)
