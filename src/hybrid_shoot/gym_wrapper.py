@@ -77,14 +77,10 @@ class HybridShootEnv(gym.Env):
         if self.joint_xy_action:
             # If joint action, continuous_act is expected to be a single number
             # where x and y are packed as: x * map_size + y
-            continuous_act = [
-                continuous_act / self.map_size,
-                continuous_act % self.map_size,
-            ]
         # Store state before step for rendering
         self.prev_state = self.state.copy()
-        self.last_action = action
-
+        self.last_action = [discrete_act, continuous_act]
+        print(f"last action: {self.last_action}")
         # Ensure conversion to list of doubles for C++
         cont_list = (
             continuous_act.tolist()
