@@ -3,6 +3,7 @@ import numpy as np
 import pygame
 from gymnasium import spaces
 from . import _hybrid_shoot
+import math
 
 
 class HybridShootEnv(gym.Env):
@@ -71,16 +72,44 @@ class HybridShootEnv(gym.Env):
 
         return self.state, {}
 
+    def _scalar_to_xy_hilbert(self, d, n):
+        """
+        Map a 1D scalar 'd' to (x, y) coordinates using a Hilbert Curve.
+
+        Args:
+            d (int): The 1D scalar input (0 to n*n - 1)
+            n (int): The width of the square grid (must be a power of 2)
+        """
+        d = round(d)
+        rx, ry, t = 0, 0, d
+        x, y = 0, 0
+        s = 1
+
+        while s < n:
+            rx = 1 & (t // 2)
+            ry = 1 & (t ^ rx)
+
+            # Rotate/flip a quadrant quadrant
+            if ry == 0:
+                if rx == 1:
+                    x = s - 1 - x
+                    y = s - 1 - y
+                x, y = y, x  # Swap x and y
+
+            x += s * rx
+            y += s * ry
+            t //= 4
+            s *= 2
+        return x, y
+
     def step(self, action):
         discrete_act, continuous_act = action
 
         if self.joint_xy_action:
             # If joint action, continuous_act is expected to be a single number
-            # where x and y are packed as: x * map_size + y
-            continuous_act = [
-                continuous_act / self.map_size,
-                continuous_act % self.map_size,
-            ]
+            continuous_act = self._scalar_to_xy_hilbert(
+                continuous_act * 31, 32
+            )  # Assuming 32x32 grid for mapping
         # Store state before step for rendering
         self.prev_state = self.state.copy()
         self.last_action = action
