@@ -73,22 +73,19 @@ def test_renderer():
         hit_radius=0.1,
         render_mode="human",
         joint_xy_action=True,
+        xy_hilbert_width=16,
     )
 
     # Override metadata to run at 2 FPS
-    env.metadata["render_fps"] = 2
+    env.metadata["render_fps"] = 20
 
     obs, _ = env.reset()
 
-    for i in range(20):
+    for i in range(256):
         print(f"Step {i+1}/10")
         # Sample a random action from the defined action space
-<<<<<<< HEAD
-        action = [0, i / 20]
+        action = [0, i / 256]
         # action = env.action_space.sample()
-=======
-        action = i / 10  # env.action_space.sample()
->>>>>>> 285f2794178d962626c1ddb88e81351798b21cbd
 
         # Gymnasium step returns 5 values
         obs, reward, terminated, truncated, info = env.step(action)

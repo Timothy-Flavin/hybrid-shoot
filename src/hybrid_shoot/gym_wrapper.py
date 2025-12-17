@@ -17,10 +17,12 @@ class HybridShootEnv(gym.Env):
         hit_radius=0.05,
         render_mode=None,
         joint_xy_action=False,
+        xy_hilbert_width=16,
     ):
 
         super().__init__()
 
+        self.xy_hilbert_width = xy_hilbert_width
         self.joint_xy_action = joint_xy_action
         self.render_mode = render_mode
         self.window_size = 512
@@ -100,7 +102,7 @@ class HybridShootEnv(gym.Env):
             y += s * ry
             t //= 4
             s *= 2
-        return x, y
+        return x / self.xy_hilbert_width, y / self.xy_hilbert_width
 
     def step(self, action):
         discrete_act, continuous_act = action
@@ -108,7 +110,7 @@ class HybridShootEnv(gym.Env):
         if self.joint_xy_action:
             # If joint action, continuous_act is expected to be a single number
             continuous_act = self._scalar_to_xy_hilbert(
-                continuous_act * 31, 32
+                continuous_act * (self.xy_hilbert_width**2), self.xy_hilbert_width
             )  # Assuming 32x32 grid for mapping
         # Store state before step for rendering
         self.prev_state = self.state.copy()
@@ -206,7 +208,9 @@ class HybridShootEnv(gym.Env):
                 pygame.event.pump()
                 pygame.display.flip()
                 self.clock.tick(self.metadata["render_fps"])
-                pygame.time.wait(200)  # Pause to show action
+                # pygame.time.wait(
+                #     1000 / self.metadata["render_fps"]
+                # )  # Pause to show action
 
         # --- Frame 2: Result Visualization ---
         canvas.fill((255, 255, 255))
