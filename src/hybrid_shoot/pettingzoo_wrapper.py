@@ -33,9 +33,17 @@ class HybridShootPettingZooEnv(ParallelEnv):
             agent: self.env.observation_space for agent in self.possible_agents
         }
 
+        self.joint_xy_action = joint_xy_action
+
+        shooter_space = (
+            spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float64)
+            if joint_xy_action
+            else spaces.Box(low=0.0, high=map_size, shape=(2,), dtype=np.float64)
+        )
+
         self.action_spaces = {
             "jammer": spaces.Discrete(n_enemies),
-            "shooter": spaces.Box(low=0.0, high=map_size, shape=(2,), dtype=np.float64),
+            "shooter": shooter_space,
         }
         self.render_mode = render_mode
 
@@ -49,7 +57,11 @@ class HybridShootPettingZooEnv(ParallelEnv):
     def step(self, actions):
         # Default actions if missing
         jam_act = actions.get("jammer", 0)
-        shoot_act = actions.get("shooter", np.array([0.0, 0.0]))
+
+        default_shoot = (
+            np.array([0.0]) if self.joint_xy_action else np.array([0.0, 0.0])
+        )
+        shoot_act = actions.get("shooter", default_shoot)
 
         # Ensure it's a list or array of floats
         if hasattr(shoot_act, "tolist"):
