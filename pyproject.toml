@@ -7,7 +7,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "hybrid_shoot"
-version = "0.1.5"
+version = "0.1.6"
 description = "A custom RL environment with C++ backend and Gymnasium wrapper."
 authors = [{ name = "Your Name" }]
 license = { text = "MIT" }
