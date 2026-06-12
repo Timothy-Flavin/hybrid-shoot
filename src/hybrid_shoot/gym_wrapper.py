@@ -35,9 +35,12 @@ class HybridShootEnv(gym.Env):
         self.state = None
         self.last_action = None
 
-        # Pass configuration to C++ to setup the difficulty/precision
+        # Pass configuration to C++ to setup the difficulty/precision.
+        # The Hilbert (joint_xy) mapping now lives in C++; the wrapper just
+        # forwards the raw scalar/xy action.
         self.cpp_env = _hybrid_shoot.HybridJamShoot(
-            independent_mode, n_enemies, map_size, hit_radius
+            independent_mode, n_enemies, map_size, hit_radius,
+            joint_xy_action, xy_hilbert_width,
         )
 
         self.n_enemies = self.cpp_env.get_num_enemies()
@@ -64,77 +67,51 @@ class HybridShootEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        raw_obs = self.cpp_env.reset()
-        self.state = np.array(raw_obs, dtype=np.float64)
-        self.prev_state = self.state.copy()
+        # C++ returns a numpy array directly -- no np.array() rebuild needed.
+        self.state = self.cpp_env.reset()
         self.last_action = None
 
         if self.render_mode == "human":
+            self.prev_state = self.state.copy()
             self.render()
 
         return self.state, {}
 
-    def _scalar_to_xy_hilbert(self, d, n):
+    def _scalar_to_xy_hilbert(self, scalar):
+        """Map a scalar in [0, 1] to (x, y) via the C++ Hilbert mapping.
+
+        Kept for rendering and tests; the hot step path no longer uses it
+        (the C++ env applies the same mapping internally).
         """
-        Map a 1D scalar 'd' to (x, y) coordinates using a Hilbert Curve.
-
-        Args:
-            d (int): The 1D scalar input (0 to n*n - 1)
-            n (int): The width of the square grid (must be a power of 2)
-        """
-        if isinstance(d, (np.ndarray, list)):
-            d = d[0]
-        d = round(d)
-        rx, ry, t = 0, 0, d
-        x, y = 0, 0
-        s = 1
-
-        while s < n:
-            rx = 1 & (t // 2)
-            ry = 1 & (t ^ rx)
-
-            # Rotate/flip a quadrant quadrant
-            if ry == 0:
-                if rx == 1:
-                    x = s - 1 - x
-                    y = s - 1 - y
-                x, y = y, x  # Swap x and y
-
-            x += s * rx
-            y += s * ry
-            t //= 4
-            s *= 2
-        return x / self.xy_hilbert_width, y / self.xy_hilbert_width
+        if isinstance(scalar, (np.ndarray, list)):
+            scalar = scalar[0]
+        return self.cpp_env.scalar_to_xy(float(scalar))
 
     def step(self, action):
         discrete_act, continuous_act = action
 
-        if self.joint_xy_action:
-            # If joint action, continuous_act is expected to be a single number
-            continuous_act = self._scalar_to_xy_hilbert(
-                continuous_act * (self.xy_hilbert_width**2), self.xy_hilbert_width
-            )  # Assuming 32x32 grid for mapping
-        # Store state before step for rendering
-        self.prev_state = self.state.copy()
-        self.last_action = [discrete_act, continuous_act]
-        # print(f"last action: {self.last_action}")
-        # Ensure conversion to list of doubles for C++
-        cont_list = (
-            continuous_act.tolist()
-            if isinstance(continuous_act, np.ndarray)
-            else list(continuous_act)
-        )
-
-        result = self.cpp_env.step(int(discrete_act), cont_list)
-
-        self.state = np.array(result.observation, dtype=np.float64)
-
+        # Snapshot the pre-step state for the render overlay (only when needed).
         if self.render_mode == "human":
-            self.render()
+            self.prev_state = self.state.copy()
+
+        # The C++ env applies the Hilbert mapping internally for joint actions,
+        # and accepts the numpy array directly (no .tolist() conversion).
+        result = self.cpp_env.step(int(discrete_act), continuous_act)
+        self.state = result.observation
+
+        if self.render_mode is not None:
+            # Resolve the action to map coordinates only when rendering.
+            if self.joint_xy_action:
+                draw_xy = self._scalar_to_xy_hilbert(continuous_act)
+            else:
+                draw_xy = continuous_act
+            self.last_action = [discrete_act, draw_xy]
+            if self.render_mode == "human":
+                self.render()
 
         return (
             self.state,
-            float(result.reward),
+            result.reward,
             result.done,
             False,
             {"msg": result.info},
@@ -192,6 +169,9 @@ class HybridShootEnv(gym.Env):
                 # Assuming we draw it if we targeted it, or maybe only if it was there.
                 # Let's draw the marker at the target's last known position.
                 t_pos = to_screen(tx, ty)
+                r_screen = int(self.hit_radius / self.map_size * self.window_size)
+                if r_screen < 2:
+                    r_screen = 2
                 pygame.draw.circle(
                     canvas, (0, 0, 255), t_pos, 20, 2
                 )  # Width 2 = unfilled

@@ -67,24 +67,24 @@ def test_renderer():
     print("\n--- Testing Renderer at 2 FPS ---")
     # Use the Gym wrapper which has the render method
     env = hybrid_shoot.HybridShootEnv(
-        independent_mode=True,
+        independent_mode=False,
         n_enemies=3,
         map_size=1.0,
         hit_radius=0.1,
         render_mode="human",
-        joint_xy_action=True,
+        joint_xy_action=False,
         xy_hilbert_width=16,
     )
 
     # Override metadata to run at 2 FPS
-    env.metadata["render_fps"] = 20
+    env.metadata["render_fps"] = 10
 
     obs, _ = env.reset()
 
     for i in range(128):
         print(f"Step {i+1}/10")
         # Sample a random action from the defined action space
-        action = [0, i / 128]
+        action = [0, [(i % 10) / 9, (i // 10) / 9]]  # i / 128]
         # action = env.action_space.sample()
 
         # Gymnasium step returns 5 values

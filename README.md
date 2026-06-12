@@ -41,14 +41,14 @@ observations, infos = env.reset()
 ```
 
 ### Agents & Action Spaces (PettingZoo)
-1.  `jammer`: `Discrete(num_enemies)` - Selects which enemy to jam.
-2.  `shooter`: `Box(low=0, high=map_size, shape=(2,))` - Selects the `[x, y]` coordinates.
+1.  `jammer`: `Discrete(num_enemies)` - Selects which enemy to jam. (jammed enemy does not cause negative reward this turn)
+2.  `shooter`: `Box(low=0, high=map_size, shape=(2,))` - Selects the `[x, y]` coordinates to shoot.
 
 ## Game Mechanics
 
 **Jamming**: Stops the targeted enemy from dealing damage this turn.
 **Shooting**: Fires at location `(x, y)`.
 
--   **Standard Mode** (`independent_mode=False`): An enemy must be **jammed** to be vulnerable to shooting. Shooting an unjammed enemy does nothing (or incurs a penalty).
+-   **Standard Mode** (`independent_mode=False`): An enemy must be **jammed** to be vulnerable to being shot. Shooting an unjammed enemy does nothing.
 -   **Independent Mode** (`independent_mode=True`): Jamming prevents damage, and Shooting kills enemies regardless of whether they are jammed.
  
