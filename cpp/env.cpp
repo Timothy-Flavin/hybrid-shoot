@@ -7,6 +7,7 @@
 #include <string>
 #include <limits>
 #include <utility>
+#include <algorithm>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -125,21 +126,24 @@ struct Core
         }
     }
 
-    // Advance one step. `cont` points to cont_dim() doubles. Returns reward,
-    // sets `done`, and writes a short status into `info` if non-null.
+    // Advance one step. `cont` points to cont_dim() doubles. Returns reward
+    // and sets `terminated` (episode reached a true terminal state: all enemies
+    // dead) and `truncated` (hit the step limit with enemies still alive) as
+    // separate flags, so a learner can bootstrap correctly on truncation.
     double step(int discrete_act, const double *cont, int cont_len,
-                bool &done, std::string *info = nullptr)
+                bool &terminated, bool &truncated, std::string *info = nullptr)
     {
         steps++;
         double reward = -0.1; // Base time penalty
-        done = false;
+        terminated = false;
+        truncated = false;
 
         double shot_x, shot_y;
         if (joint_xy_action)
         {
             if (cont_len < 1)
             {
-                done = true;
+                terminated = true;
                 return -1.0;
             }
             auto xy = scalar_to_xy(cont[0]);
@@ -150,7 +154,7 @@ struct Core
         {
             if (cont_len < 2)
             {
-                done = true;
+                terminated = true;
                 return -1.0;
             }
             shot_x = cont[0];
@@ -215,7 +219,7 @@ struct Core
             }
         }
 
-        // ---- Termination
+        // ---- Termination vs. truncation
         bool all_dead = true;
         for (const auto &e : enemies)
             if (e.alive)
@@ -224,10 +228,10 @@ struct Core
         if (all_dead)
         {
             reward += 5.0;
-            done = true;
+            terminated = true; // true terminal: bootstrap value is 0
         }
         else if (steps >= MAX_STEPS)
-            done = true;
+            truncated = true; // time limit: still bootstrap from final obs
 
         return reward;
     }
@@ -237,7 +241,9 @@ struct StepResult
 {
     py::array_t<double> observation;
     double reward;
-    bool done;
+    bool terminated;
+    bool truncated;
+    bool done; // convenience: terminated || truncated
     std::string info;
 };
 
@@ -277,10 +283,10 @@ public:
                     py::array_t<double, py::array::c_style | py::array::forcecast> cont)
     {
         StepResult r;
-        bool done;
         r.reward = core.step(discrete_act, cont.data(),
-                             static_cast<int>(cont.size()), done, &r.info);
-        r.done = done;
+                             static_cast<int>(cont.size()),
+                             r.terminated, r.truncated, &r.info);
+        r.done = r.terminated || r.truncated;
         r.observation = make_obs();
         return r;
     }
@@ -344,7 +350,14 @@ public:
     }
 
     // actions: discrete (num_envs,), continuous (num_envs, cont_dim).
-    // Returns (obs, rewards, dones) with automatic per-env reset on done.
+    // Returns (obs, rewards, terminated, truncated, final_obs):
+    //   obs        -- next observation; for an env that just ended this is the
+    //                 first observation of the freshly-reset episode (autoreset)
+    //   terminated -- reached a true terminal state (bootstrap target = 0)
+    //   truncated  -- hit the step limit with enemies alive (still bootstrap)
+    //   final_obs  -- the real post-step observation that actually occurred
+    //                 (the s' to bootstrap from); for envs that did NOT end it
+    //                 equals obs. Only meaningful where terminated | truncated.
     py::tuple step(
         py::array_t<int, py::array::c_style | py::array::forcecast> disc_arr,
         py::array_t<double, py::array::c_style | py::array::forcecast> cont_arr)
@@ -353,28 +366,50 @@ public:
         const double *cont = cont_arr.data();
 
         py::array_t<double> obs({num_envs, obs_dim});
+        py::array_t<double> final_obs({num_envs, obs_dim});
         py::array_t<double> rewards(num_envs);
-        py::array_t<bool> dones(num_envs);
+        py::array_t<bool> terminated(num_envs);
+        py::array_t<bool> truncated(num_envs);
         double *op = obs.mutable_data();
+        double *fp = final_obs.mutable_data();
         double *rp = rewards.mutable_data();
-        bool *dp = dones.mutable_data();
+        bool *tp = terminated.mutable_data();
+        bool *up = truncated.mutable_data();
 
         {
             py::gil_scoped_release release;
 #pragma omp parallel for schedule(static)
             for (int e = 0; e < num_envs; ++e)
             {
-                bool done;
+                bool term, trunc;
                 double r = cores[e].step(
-                    disc[e], cont + static_cast<size_t>(e) * cont_dim, cont_dim, done);
-                if (done)
-                    cores[e].reset(); // autoreset, like Gym VectorEnv / envpool
-                cores[e].write_obs(op + static_cast<size_t>(e) * obs_dim);
+                    disc[e], cont + static_cast<size_t>(e) * cont_dim, cont_dim,
+                    term, trunc);
+
+                double *fobs = fp + static_cast<size_t>(e) * obs_dim;
+                double *mobs = op + static_cast<size_t>(e) * obs_dim;
+
+                // The genuine observation that resulted from this step (s').
+                cores[e].write_obs(fobs);
+
+                if (term || trunc)
+                {
+                    // Autoreset: the returned obs is the new episode's first
+                    // observation; the true s' is preserved in final_obs.
+                    cores[e].reset();
+                    cores[e].write_obs(mobs);
+                }
+                else
+                {
+                    std::copy(fobs, fobs + obs_dim, mobs);
+                }
+
                 rp[e] = r;
-                dp[e] = done;
+                tp[e] = term;
+                up[e] = trunc;
             }
         }
-        return py::make_tuple(obs, rewards, dones);
+        return py::make_tuple(obs, rewards, terminated, truncated, final_obs);
     }
 
     int get_num_envs() { return num_envs; }
@@ -388,6 +423,8 @@ PYBIND11_MODULE(_hybrid_shoot, m)
     py::class_<StepResult>(m, "StepResult")
         .def_readwrite("observation", &StepResult::observation)
         .def_readwrite("reward", &StepResult::reward)
+        .def_readwrite("terminated", &StepResult::terminated)
+        .def_readwrite("truncated", &StepResult::truncated)
         .def_readwrite("done", &StepResult::done)
         .def_readwrite("info", &StepResult::info);
 

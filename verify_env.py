@@ -167,7 +167,7 @@ def test_vec_matches_single():
     # enemy's coords always hits, making dynamics deterministic given obs.
     disc = np.zeros(n_envs, dtype=np.int32)
     cont = np.stack([obs[:, 0], obs[:, 1]], axis=1)  # aim at enemy 0 of each env
-    obs2, rewards, dones = vec.step(disc, cont)
+    obs2, rewards, terminated, truncated, final_obs = vec.step(disc, cont)
     # Independent mode, jam e0, kill e0: -0.1 + 10 - 0.5*(#other alive enemies).
     # All envs start with 3 alive -> two others unjammed -> reward 8.9.
     ok = np.allclose(rewards, 8.9)
@@ -177,12 +177,60 @@ def test_vec_matches_single():
           f"shape={obs.shape}")
 
 
+def test_vec_truncation_bootstrap():
+    """On truncation the returned obs is the reset state, but the true final
+    observation (the s' to bootstrap from) is preserved in info."""
+    print("\n[6] Vectorized env: terminated/truncated split + final_observation")
+    from hybrid_shoot import HybridShootVecEnv
+    n_envs = 4
+    venv = HybridShootVecEnv(
+        independent_mode=False, n_enemies=3, hit_radius=0.001, num_envs=n_envs
+    )
+    obs, _ = venv.reset()
+    miss = np.full((n_envs, 2), 5.0)   # shoot off-map -> never hits
+    jam = np.full(n_envs, -1)          # invalid jam -> nobody dies
+    truncated_hit = False
+    for t in range(60):
+        prev = obs.copy()
+        obs, r, term, trunc, infos = venv.step((jam, miss))
+        if trunc.any():
+            i = int(np.flatnonzero(trunc)[0])
+            fo = infos["final_observation"][i]
+            check("truncation reported as truncated, not terminated",
+                  trunc[i] and not term[i])
+            check("truncation happens at the step limit (50)", t + 1 == 50,
+                  f"t+1={t+1}")
+            check("final_observation != returned (reset) obs",
+                  not np.allclose(fo, obs[i]))
+            check("final_observation is the genuine pre-reset s'",
+                  np.allclose(fo, prev[i]))
+            check("_final_observation mask marks this env", infos["_final_observation"][i])
+            truncated_hit = True
+            break
+    check("a truncation actually occurred within 60 steps", truncated_hit)
+
+    # Terminated env: final obs shows the kill; returned obs is a new episode.
+    v2 = HybridShootVecEnv(
+        independent_mode=True, n_enemies=1, hit_radius=1.0, num_envs=8
+    )
+    o, _ = v2.reset()
+    o2, r, term, trunc, infos = v2.step(
+        (np.zeros(8, dtype=np.int32), np.stack([o[:, 0], o[:, 1]], axis=1))
+    )
+    i = int(np.flatnonzero(term)[0])
+    check("kill reported as terminated, not truncated", term[i] and not trunc[i])
+    check("final_observation shows the enemy dead (alive flag 0)",
+          approx(infos["final_observation"][i][2], 0.0))
+    check("returned obs is a fresh episode (alive flag 1)", approx(o2[i][2], 1.0))
+
+
 if __name__ == "__main__":
     test_independent_dead_enemies()
     test_independent_jam_blocks_damage()
     test_dependent_mode()
     test_hilbert_coverage()
     test_vec_matches_single()
+    test_vec_truncation_bootstrap()
 
     print("\n" + "=" * 60)
     print(f"Result: {_fail} failure(s), {_warn} warning(s)")

@@ -92,9 +92,19 @@ class HybridShootVecEnv:
           * discrete:   array-like of shape (num_envs,)
           * continuous: array-like of shape (num_envs, cont_dim)
 
-        Returns ``(obs, rewards, terminations, truncations, infos)``. The C++
-        core reports a single ``done`` flag (terminal or step-limit); it is
-        surfaced as ``terminations`` with ``truncations`` left all-False.
+        Returns ``(obs, rewards, terminations, truncations, infos)`` following
+        the Gymnasium VectorEnv convention:
+
+          * ``obs`` is the next observation; for an env that just finished it is
+            the first observation of the freshly auto-reset episode.
+          * ``terminations`` marks true terminal states (bootstrap target 0).
+          * ``truncations`` marks step-limit endings (still bootstrap from the
+            final observation).
+          * For every env that ended, ``infos["final_observation"][i]`` holds the
+            real post-step observation that actually occurred (the ``s'`` to
+            bootstrap from), with ``infos["_final_observation"]`` the boolean
+            mask of which entries are populated. This mirrors
+            ``gymnasium.vector.SyncVectorEnv`` so RL libraries can consume it.
         """
         discrete, continuous = actions
         discrete = np.ascontiguousarray(discrete, dtype=np.int32)
@@ -102,9 +112,21 @@ class HybridShootVecEnv:
         if continuous.ndim == 1:
             continuous = continuous.reshape(self.num_envs, self.cont_dim)
 
-        obs, rewards, dones = self._vec.step(discrete, continuous)
-        truncations = np.zeros(self.num_envs, dtype=bool)
-        return obs, rewards, dones, truncations, {}
+        obs, rewards, terminations, truncations, final_obs = self._vec.step(
+            discrete, continuous
+        )
+
+        infos = {}
+        done = terminations | truncations
+        if done.any():
+            final_observation = np.full(self.num_envs, None, dtype=object)
+            idx = np.flatnonzero(done)
+            for i in idx:
+                final_observation[i] = final_obs[i]
+            infos["final_observation"] = final_observation
+            infos["_final_observation"] = done
+
+        return obs, rewards, terminations, truncations, infos
 
     def close(self):
         pass

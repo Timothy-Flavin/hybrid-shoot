@@ -112,8 +112,8 @@ class HybridShootEnv(gym.Env):
         return (
             self.state,
             result.reward,
-            result.done,
-            False,
+            result.terminated,
+            result.truncated,
             {"msg": result.info},
         )
 
