@@ -34,6 +34,7 @@ class HybridShootVecEnv:
         joint_xy_action=False,
         xy_hilbert_width=16,
         num_threads=0,
+        max_len=5,
     ):
         self.num_envs = num_envs
         self.joint_xy_action = joint_xy_action
@@ -47,6 +48,7 @@ class HybridShootVecEnv:
             joint_xy_action,
             xy_hilbert_width,
             num_threads,
+            max_len,
         )
 
         self.n_enemies = self._vec.get_num_enemies()

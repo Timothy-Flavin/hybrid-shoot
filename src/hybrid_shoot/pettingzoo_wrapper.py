@@ -17,6 +17,7 @@ class HybridShootPettingZooEnv(ParallelEnv):
         hit_radius=0.05,
         render_mode=None,
         joint_xy_action=False,
+        max_len=5,
     ):
         self.env = HybridShootEnv(
             independent_mode,
@@ -25,6 +26,7 @@ class HybridShootPettingZooEnv(ParallelEnv):
             hit_radius,
             render_mode,
             joint_xy_action,
+            max_len=max_len,
         )
         self.possible_agents = ["jammer", "shooter"]
         self.agents = self.possible_agents[:]

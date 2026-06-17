@@ -19,7 +19,7 @@ namespace py = pybind11;
 const int NUM_ENEMIES_DEFAULT = 3;
 const double MAP_SIZE_DEFAULT = 1.0;
 const double HIT_RADIUS_DEFAULT = 0.05;
-const int MAX_STEPS = 50;
+const int MAX_STEPS_DEFAULT = 5;
 const double DAMAGE_PER_TURN = 0.5;
 
 struct Enemy
@@ -43,13 +43,14 @@ struct Core
     double hit_radius;
     bool joint_xy_action;
     int hilbert_width;
+    int max_steps;
     std::mt19937 rng;
 
     Core(bool mode, int n_enemies, double size, double radius,
-         bool joint, int hwidth, uint32_t seed)
+         bool joint, int hwidth, int m_steps, uint32_t seed)
         : independent_mode(mode), num_enemies(n_enemies), map_size(size),
           hit_radius(radius), joint_xy_action(joint), hilbert_width(hwidth),
-          rng(seed)
+          max_steps(m_steps), rng(seed)
     {
         enemies.resize(num_enemies);
     }
@@ -230,7 +231,7 @@ struct Core
             reward += 5.0;
             terminated = true; // true terminal: bootstrap value is 0
         }
-        else if (steps >= MAX_STEPS)
+        else if (steps >= max_steps)
             truncated = true; // time limit: still bootstrap from final obs
 
         return reward;
@@ -262,9 +263,10 @@ public:
                    double size = MAP_SIZE_DEFAULT,
                    double radius = HIT_RADIUS_DEFAULT,
                    bool joint_xy_action = false,
-                   int hilbert_width = 16)
+                   int hilbert_width = 16,
+                   int max_steps = MAX_STEPS_DEFAULT)
         : core(mode, n_enemies, size, radius, joint_xy_action, hilbert_width,
-               std::random_device{}()) {}
+               max_steps, std::random_device{}()) {}
 
     py::array_t<double> make_obs()
     {
@@ -317,14 +319,15 @@ public:
                       double radius = HIT_RADIUS_DEFAULT,
                       bool joint_xy_action = false,
                       int hilbert_width = 16,
-                      int num_threads = 0)
+                      int num_threads = 0,
+                      int max_steps = MAX_STEPS_DEFAULT)
         : num_envs(n_envs)
     {
         std::random_device rd;
         cores.reserve(n_envs);
         for (int e = 0; e < n_envs; ++e)
             cores.emplace_back(mode, n_enemies, size, radius,
-                               joint_xy_action, hilbert_width, rd());
+                               joint_xy_action, hilbert_width, max_steps, rd());
         obs_dim = cores[0].obs_dim();
         cont_dim = cores[0].cont_dim();
 #ifdef _OPENMP
@@ -429,13 +432,14 @@ PYBIND11_MODULE(_hybrid_shoot, m)
         .def_readwrite("info", &StepResult::info);
 
     py::class_<HybridJamShoot>(m, "HybridJamShoot")
-        .def(py::init<bool, int, double, double, bool, int>(),
+        .def(py::init<bool, int, double, double, bool, int, int>(),
              py::arg("independent_mode") = false,
              py::arg("n_enemies") = 3,
              py::arg("map_size") = 1.0,
              py::arg("hit_radius") = 0.05,
              py::arg("joint_xy_action") = false,
-             py::arg("hilbert_width") = 16)
+             py::arg("hilbert_width") = 16,
+             py::arg("max_steps") = MAX_STEPS_DEFAULT)
         .def("reset", &HybridJamShoot::reset)
         .def("step", &HybridJamShoot::step,
              py::arg("discrete_act"), py::arg("continuous_act"))
@@ -444,7 +448,7 @@ PYBIND11_MODULE(_hybrid_shoot, m)
         .def("get_obs_dim", &HybridJamShoot::get_obs_dim);
 
     py::class_<VecHybridJamShoot>(m, "VecHybridJamShoot")
-        .def(py::init<int, bool, int, double, double, bool, int, int>(),
+        .def(py::init<int, bool, int, double, double, bool, int, int, int>(),
              py::arg("num_envs"),
              py::arg("independent_mode") = false,
              py::arg("n_enemies") = 3,
@@ -452,7 +456,8 @@ PYBIND11_MODULE(_hybrid_shoot, m)
              py::arg("hit_radius") = 0.05,
              py::arg("joint_xy_action") = false,
              py::arg("hilbert_width") = 16,
-             py::arg("num_threads") = 0)
+             py::arg("num_threads") = 0,
+             py::arg("max_steps") = MAX_STEPS_DEFAULT)
         .def("reset", &VecHybridJamShoot::reset)
         .def("step", &VecHybridJamShoot::step,
              py::arg("discrete_acts"), py::arg("continuous_acts"))

@@ -18,6 +18,7 @@ class HybridShootEnv(gym.Env):
         render_mode=None,
         joint_xy_action=False,
         xy_hilbert_width=16,
+        max_len=5,
     ):
 
         super().__init__()
@@ -40,7 +41,7 @@ class HybridShootEnv(gym.Env):
         # forwards the raw scalar/xy action.
         self.cpp_env = _hybrid_shoot.HybridJamShoot(
             independent_mode, n_enemies, map_size, hit_radius,
-            joint_xy_action, xy_hilbert_width,
+            joint_xy_action, xy_hilbert_width, max_len,
         )
 
         self.n_enemies = self.cpp_env.get_num_enemies()
